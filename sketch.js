@@ -13,17 +13,15 @@ class Motor {
         this.rate = rate;
         this.angle = 0;
         this.armLength = armLength;
-
+	
     }
 
     getArmPosition() {
-
         return [this.armX, this.armY];
 
     }
 
-    setArmPosition() {
-
+    updateArmPosition() {
         this.armX = this.x + this.radius * cos(radians(this.angle));
         this.armY = this.y + this.radius * sin(radians(this.angle));
         this.angle += this.rate;
@@ -73,8 +71,10 @@ class Machine {
         this.motor3 = motor3;
         this.armIntersectX = 0;
         this.armIntersectY = 0;
+	[this.armIntersectX, this.armIntersectY] = this.getArmConnectionPosition();
         this.dist = dist;
-
+	this.pixelColors = [];
+	this.prevPixelColors = [];
 
     }
 
@@ -84,6 +84,7 @@ class Machine {
         let [x2, y2] = this.motor2.getArmPosition();
         let armLength1 = this.motor1.getArmLength();
         let armLength2 = this.motor2.getArmLength();
+	
         return getCircleIntersections(x1, y1, armLength1, x2, y2, armLength2);
 
     }
@@ -100,44 +101,77 @@ class Machine {
     }
 
     update() {
-
+	
         let newPos = this.motor3.getPerpendicularPoints(this.dist);
-        this.motor1.setArmPosition();
+        this.motor1.updateArmPosition();
         this.motor1.setPosition(newPos[0], newPos[1]);
-        this.motor2.setArmPosition();
+        this.motor2.updateArmPosition();
         this.motor2.setPosition(newPos[2], newPos[3]);
         [this.armIntersectX, this.armIntersectY] = this.getArmConnectionPosition();
-        this.motor3.setArmPosition();
+        this.motor3.updateArmPosition();
 
     }
 
     draw() {
+	// save pixels
+    	for (let i = 0; i < this.prevPixelColors.length; i++) {
+	    let c = color("red")
+	    set(this.prevPixelColors[i][0],this.prevPixelColors[i][1], this.prevPixelColors[i][2])
+	}
+	updatePixels()
 
-        this.motor1.draw();
+	
+        let [x1, y1] = this.motor1.getArmPosition();
+        let [x2, y2] = this.motor2.getArmPosition();
+
+	// extend arm with pen
+        let vec =  [this.armIntersectX - x2, this.armIntersectY - y2];
+        let newVec = [vec[0] * 1.5, vec[1] * 1.5];
+	fill(291, 67, 62, 0.2);
+	let penPos = this.getPenPosition();
+
+	
+	noStroke()
+	circle(penPos[0],penPos[1], 1.2);
+	stroke("black")
+	
+	let arm1Pixels = bresenhams(x1,y1,this.armIntersectX,this.armIntersectY,2)
+	let arm2Pixels = bresenhams(x2,y2,this.armIntersectX,this.armIntersectY,2)
+	let armPenPixels = bresenhams(x2 + newVec[0], y2 + newVec[1], this.armIntersectX, this.armIntersectY,2)
+
+	this.pixelColors = []
+
+	// restore pixels
+	for (let i = 0; i < arm1Pixels.length;i++) {
+	    
+	    this.pixelColors.push([arm1Pixels[i][0],arm1Pixels[i][1],get(arm1Pixels[i][0],arm1Pixels[i][1])])
+	}
+	for (let i = 0; i < arm2Pixels.length;i++) {
+	    this.pixelColors.push([arm2Pixels[i][0],arm2Pixels[i][1],get(arm2Pixels[i][0],arm2Pixels[i][1])])
+	}
+	for (let i = 0; i < armPenPixels.length;i++) {
+	    this.pixelColors.push([armPenPixels[i][0],armPenPixels[i][1],get(armPenPixels[i][0],armPenPixels[i][1])])
+	}
+
+
+	this.prevPixelColors = this.pixelColors
+
+	// draw
+	line(x2 + newVec[0], y2 + newVec[1], this.armIntersectX, this.armIntersectY);
+        line(x1, y1, this.armIntersectX, this.armIntersectY);
+        line(x2, y2, this.armIntersectX, this.armIntersectY);
+	this.motor1.draw();
         this.motor2.draw();
         this.motor3.draw();
 
-        // draw arms
-        let [x1, y1] = this.motor1.getArmPosition();
-        let [x2, y2] = this.motor2.getArmPosition();
-        line(x1, y1, this.armIntersectX, this.armIntersectY);
-        line(x2, y2, this.armIntersectX, this.armIntersectY);
-
-        fill("grey");
-        circle(this.armIntersectX, this.armIntersectY, 6);
-
-        // extend arm with pen
-        let vec =  [this.armIntersectX - x2, this.armIntersectY - y2];
-        let newVec = [vec[0] * 1.5, vec[1] * 1.5];
-        line(x2 + newVec[0], y2 + newVec[1], this.armIntersectX, this.armIntersectY);
-
+	
     }
 
 }
 
 let p = [];
 
-let numIterations = 250000;
+let numIterations = 375000;
 let armLength1 = 75;
 let armLength2 = 85;
 let outerRadius = 150;
@@ -161,43 +195,16 @@ const machine = new Machine(motor1, motor2, motor3, motorDistance);
 
 
 
-
 function setup() {
     
     createCanvas(canvasWidth, canvasHeight);
     colorMode(HSB);
-    if (!drawMachine) {
-        noLoop();
-    }
-    
-}
-
-function draw() {
-    
-    if (drawMachine) {
-	
-        stroke("black");
-        let newVec = machine.getPenPosition();
-        p.push(newVec);
-
-        background("lightgrey");
-        machine.draw();
-
-        noStroke();
-        fill(291, 67, 62, 0.2);
-	
-        for (let i = 0; i < p.length; i++) {
-	    
-            circle(p[i][0], p[i][1], 1.2);
-        }
-	
+ 
+    machine.update();
         machine.update();
+    frameRate(60)
 
-    }
-    
-    else {
-	
-        for (let i = 0; i < numIterations; i++) {
+     for (let i = 0; i < numIterations; i++) {
 	    
             stroke("black");
             let newVec = machine.getPenPosition();
@@ -208,19 +215,30 @@ function draw() {
             machine.update();
 
         }
-	
-        for (let i = 0; i < p.length; i++) {
+
+}
+let count = 0
+let i = 0
+let z = 1024
+function draw() {
+   
+count++
+  
+ 
+    for (let j = 0; j < z; j++) {
+
+	if (i > p.length / 2) {
 	    
-            if (i > p.length / 2) {
-		
-                fill(17, 82, 86, 0.2);
+            fill(17, 82, 86, 0.2);
 		
             }
-	    
-            circle(p[i][0], p[i][1], 1.2);
-	    
-        }
+	circle(p[i+j][0], p[i+j][1], 1.2);
     }
+	i+=z;
+
+	
+
+    
 }
 
 function euclideanDistance(x1, y1, x2, y2)  {
@@ -265,4 +283,53 @@ function calculatePerpendicularPoints(centerX, centerY, radius, degree,dist) {
 
   return [perpendicularX, perpendicularY,perpendicularX2, perpendicularY2]
 
+}
+
+function bresenhams(x0, y0, x1, y1, lineWidth) {
+    let pixels = [];
+    x0 = Math.floor(x0)
+    y0 = Math.floor(y0)
+    x1 = Math.floor(x1)
+        y1 = Math.floor(y1)
+  let dx = Math.abs(x1 - x0);
+  let dy = -Math.abs(y1 - y0);
+  let sx = x0 < x1 ? 1 : -1;
+  let sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  let e2;
+  let x = x0;
+  let y = y0;
+
+  // Adjust for line width (Assuming odd line width for centered line)
+  let halfWidth = Math.floor(lineWidth / 2);
+  let xOffset = (lineWidth % 2 === 0) ? 0.5 : 0;
+  let yOffset = (lineWidth % 2 === 0) ? 0.5 : 0;
+    while (true) {
+
+	
+	for (let i = -halfWidth; i <= halfWidth; i++) {
+	    for (let j = -halfWidth; j <= halfWidth; j++) {
+		pixels.push([x + i + xOffset, y + j + yOffset]);
+	    }
+	}
+	
+	if (x === x1 && y === y1) break;
+	e2 = 2 * err;
+	if (e2 >= dy) {
+	    if (x0===x1) {
+		break
+	    }
+	    
+	    err += dy;
+	    x += sx;
+	}
+	if (e2 <= dx) {
+	    if (y0===y1) {
+		break
+	    }
+	    err += dx;
+	    y += sy;
+	}
+    }
+    return pixels;
 }
